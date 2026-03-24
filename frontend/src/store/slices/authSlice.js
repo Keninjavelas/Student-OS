@@ -7,12 +7,12 @@ const mockAccounts = [
   {
     email: "student@studentos.com",
     password: "student123",
-    user: { id: "demo-student-1", fullName: "Demo Student", role: "student" }
+    user: { _id: "demo-student-1", fullName: "Demo Student", role: "student" }
   },
   {
     email: "admin@studentos.com",
     password: "admin123",
-    user: { id: "demo-admin-1", fullName: "Demo Admin", role: "admin" }
+    user: { _id: "demo-admin-1", fullName: "Demo Admin", role: "admin" }
   }
 ];
 
@@ -26,11 +26,11 @@ function readPersistedAuth() {
 }
 
 function persistAuth(payload) {
-  localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(payload));
+  apiClient.setStoredAuth(payload);
 }
 
 function clearPersistedAuth() {
-  localStorage.removeItem(AUTH_STORAGE_KEY);
+  apiClient.clearStoredAuth();
 }
 
 export const loginUser = createAsyncThunk("auth/loginUser", async ({ email, password }, { rejectWithValue }) => {
@@ -38,7 +38,8 @@ export const loginUser = createAsyncThunk("auth/loginUser", async ({ email, pass
     const data = await apiClient.post("/api/auth/login", { email, password });
     return {
       user: data.user,
-      token: data.token || "live-session-token",
+      accessToken: data.accessToken,
+      refreshToken: data.refreshToken,
       source: "api"
     };
   } catch {
@@ -50,7 +51,8 @@ export const loginUser = createAsyncThunk("auth/loginUser", async ({ email, pass
     }
     return {
       user: matched.user,
-      token: "mock-session-token",
+      accessToken: "mock-session-token",
+      refreshToken: "mock-refresh-token",
       source: "mock"
     };
   }
@@ -63,7 +65,8 @@ export const registerUser = createAsyncThunk(
       const data = await apiClient.post("/api/auth/register", { fullName, email, password, role });
       return {
         user: data.user,
-        token: data.token || "live-session-token",
+        accessToken: data.accessToken,
+        refreshToken: data.refreshToken,
         source: "api"
       };
     } catch {
@@ -72,17 +75,34 @@ export const registerUser = createAsyncThunk(
       }
       return {
         user: {
-          id: `mock-${Date.now()}`,
+          _id: `mock-${Date.now()}`,
           fullName,
           email,
           role
         },
-        token: "mock-session-token",
+        accessToken: "mock-session-token",
+        refreshToken: "mock-refresh-token",
         source: "mock"
       };
     }
   }
 );
+
+export const fetchCurrentUser = createAsyncThunk("auth/fetchCurrentUser", async (_, { rejectWithValue }) => {
+  try {
+    const data = await apiClient.get("/api/auth/me");
+    return { user: data.user };
+  } catch (error) {
+    return rejectWithValue(error.message || "Session expired");
+  }
+});
+
+export const logoutUser = createAsyncThunk("auth/logoutUser", async (_, { getState }) => {
+  const source = getState().auth.source;
+  if (source === "api") {
+    await apiClient.post("/api/auth/logout");
+  }
+});
 
 const persisted = readPersistedAuth();
 
@@ -90,16 +110,18 @@ const authSlice = createSlice({
   name: "auth",
   initialState: {
     user: persisted?.user || null,
-    token: persisted?.token || null,
-    isAuthenticated: Boolean(persisted?.token),
+    accessToken: persisted?.accessToken || null,
+    refreshToken: persisted?.refreshToken || null,
+    isAuthenticated: Boolean(persisted?.accessToken),
     source: persisted?.source || null,
     status: "idle",
     error: null
   },
   reducers: {
-    logout(state) {
+    logoutLocal(state) {
       state.user = null;
-      state.token = null;
+      state.accessToken = null;
+      state.refreshToken = null;
       state.isAuthenticated = false;
       state.source = null;
       state.status = "idle";
@@ -116,12 +138,14 @@ const authSlice = createSlice({
       .addCase(loginUser.fulfilled, (state, action) => {
         state.status = "succeeded";
         state.user = action.payload.user;
-        state.token = action.payload.token;
+        state.accessToken = action.payload.accessToken;
+        state.refreshToken = action.payload.refreshToken;
         state.source = action.payload.source;
         state.isAuthenticated = true;
         persistAuth({
           user: action.payload.user,
-          token: action.payload.token,
+          accessToken: action.payload.accessToken,
+          refreshToken: action.payload.refreshToken,
           source: action.payload.source
         });
       })
@@ -136,21 +160,45 @@ const authSlice = createSlice({
       .addCase(registerUser.fulfilled, (state, action) => {
         state.status = "succeeded";
         state.user = action.payload.user;
-        state.token = action.payload.token;
+        state.accessToken = action.payload.accessToken;
+        state.refreshToken = action.payload.refreshToken;
         state.source = action.payload.source;
         state.isAuthenticated = true;
         persistAuth({
           user: action.payload.user,
-          token: action.payload.token,
+          accessToken: action.payload.accessToken,
+          refreshToken: action.payload.refreshToken,
           source: action.payload.source
         });
       })
       .addCase(registerUser.rejected, (state, action) => {
         state.status = "failed";
         state.error = action.payload || action.error.message || "Registration failed";
+      })
+      .addCase(fetchCurrentUser.fulfilled, (state, action) => {
+        state.user = action.payload.user;
+        state.isAuthenticated = true;
+      })
+      .addCase(fetchCurrentUser.rejected, (state) => {
+        state.user = null;
+        state.accessToken = null;
+        state.refreshToken = null;
+        state.isAuthenticated = false;
+        state.source = null;
+        clearPersistedAuth();
+      })
+      .addCase(logoutUser.fulfilled, (state) => {
+        state.user = null;
+        state.accessToken = null;
+        state.refreshToken = null;
+        state.isAuthenticated = false;
+        state.source = null;
+        state.status = "idle";
+        state.error = null;
+        clearPersistedAuth();
       });
   }
 });
 
-export const { logout } = authSlice.actions;
+export const { logoutLocal } = authSlice.actions;
 export default authSlice.reducer;

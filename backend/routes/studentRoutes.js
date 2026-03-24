@@ -2,8 +2,11 @@ const express = require("express");
 const mongoose = require("mongoose");
 const User = require("../models/User");
 const StudentProfile = require("../models/StudentProfile");
+const authMiddleware = require("../middlewares/authMiddleware");
 
 const router = express.Router();
+
+router.use(authMiddleware);
 
 async function predictReadinessScore({ gpa, dsaScore, totalBadges }) {
   const baseUrl = (process.env.AI_SERVICE_URL || "http://localhost:8000").replace(/\/+$/, "");
@@ -43,6 +46,10 @@ async function predictReadinessScore({ gpa, dsaScore, totalBadges }) {
 
 router.get("/profile/:userId", async (req, res) => {
   try {
+    if (req.auth.role === "student" && req.auth.userId !== userId) {
+      return res.status(403).json({ message: "Students can only access their own profile" });
+    }
+
     const { userId } = req.params;
     if (!mongoose.isValidObjectId(userId)) {
       return res.status(400).json({ message: "Invalid userId" });
@@ -65,6 +72,10 @@ router.get("/profile/:userId", async (req, res) => {
 
 router.post("/profile/:userId", async (req, res) => {
   try {
+    if (req.auth.role === "student" && req.auth.userId !== userId) {
+      return res.status(403).json({ message: "Students can only update their own profile" });
+    }
+
     const { userId } = req.params;
     if (!mongoose.isValidObjectId(userId)) {
       return res.status(400).json({ message: "Invalid userId" });

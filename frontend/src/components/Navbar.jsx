@@ -1,6 +1,6 @@
 import { Link, NavLink, useNavigate } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
-import { logout } from "../store/slices/authSlice";
+import { logoutLocal, logoutUser } from "../store/slices/authSlice";
 
 const studentLinks = [
   { to: "/", label: "Dashboard" },
@@ -21,8 +21,12 @@ function Navbar() {
   const { user } = useSelector((state) => state.auth);
   const links = user?.role === "admin" ? adminLinks : studentLinks;
 
-  function handleLogout() {
-    dispatch(logout());
+  async function handleLogout() {
+    try {
+      await dispatch(logoutUser()).unwrap();
+    } catch {
+      dispatch(logoutLocal());
+    }
     navigate("/login", { replace: true });
   }
 

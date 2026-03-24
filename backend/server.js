@@ -2,7 +2,11 @@ const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
 const dotenv = require("dotenv");
+const bcrypt = require("bcryptjs");
 const studentRoutes = require("./routes/studentRoutes");
+const authRoutes = require("./routes/authRoutes");
+const authMiddleware = require("./middlewares/authMiddleware");
+const roleMiddleware = require("./middlewares/roleMiddleware");
 const StudentProfile = require("./models/StudentProfile");
 const User = require("./models/User");
 
@@ -19,9 +23,10 @@ app.get("/api/health", (req, res) => {
   res.status(200).json({ status: "ok", service: "backend" });
 });
 
+app.use("/api/auth", authRoutes);
 app.use("/api/students", studentRoutes);
 
-app.get("/api/admin/students", async (req, res) => {
+app.get("/api/admin/students", authMiddleware, roleMiddleware(["admin"]), async (req, res) => {
   try {
     const students = await StudentProfile.find()
       .populate("user", "fullName email")
@@ -37,17 +42,37 @@ app.use((req, res) => {
 });
 
 async function ensureDemoStudent() {
-  const existingStudents = await StudentProfile.countDocuments();
-  if (existingStudents > 0) {
-    return;
+  const demoStudentEmail = "student@studentos.com";
+  const demoAdminEmail = "admin@studentos.com";
+
+  const demoStudentExists = await User.findOne({ email: demoStudentEmail });
+  const demoAdminExists = await User.findOne({ email: demoAdminEmail });
+  const demoStudentPasswordHash = await bcrypt.hash("student123", 10);
+  const demoAdminPasswordHash = await bcrypt.hash("admin123", 10);
+
+  let demoUser = demoStudentExists;
+  if (!demoStudentExists) {
+    demoUser = await User.create({
+      fullName: "Demo Student",
+      email: demoStudentEmail,
+      passwordHash: demoStudentPasswordHash,
+      role: "student"
+    });
   }
 
-  const demoUser = await User.create({
-    fullName: "Demo Student",
-    email: "student.demo@studentos.com",
-    passwordHash: "demo-password-hash",
-    role: "student"
-  });
+  if (!demoAdminExists) {
+    await User.create({
+      fullName: "Demo Admin",
+      email: demoAdminEmail,
+      passwordHash: demoAdminPasswordHash,
+      role: "admin"
+    });
+  }
+
+  const demoProfileExists = await StudentProfile.findOne({ user: demoUser._id });
+  if (demoProfileExists) {
+    return;
+  }
 
   await StudentProfile.create({
     user: demoUser._id,
