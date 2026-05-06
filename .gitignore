@@ -1,0 +1,164 @@
+# ============================================
+# NODE / NPM
+# ============================================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.npm
+package-lock.json
+yarn.lock
+
+# ============================================
+# PYTHON
+# ============================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+venv/
+ENV/
+env/
+.venv
+
+# ============================================
+# ENVIRONMENT VARIABLES (CRITICAL!)
+# ============================================
+.env
+.env.local
+.env.*.local
+.env.production.local
+.env.development.local
+.env.test.local
+.aws/credentials
+.aws/config
+terraform/terraform.tfvars
+terraform/terraform.tfvars.json
+terraform/.terraform/
+terraform/.terraform.lock.hcl
+
+# ============================================
+# IDE / EDITOR
+# ============================================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+.env.local.example
+.history
+
+# ============================================
+# BUILD OUTPUT
+# ============================================
+dist/
+build/
+*.min.js
+*.min.css
+frontend/dist/
+ai-service/dist/
+backend/dist/
+
+# ============================================
+# LOGS
+# ============================================
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+lerna-debug.log*
+
+# ============================================
+# DOCKER
+# ============================================
+docker-compose.override.yml
+.docker/
+.dockerignore
+
+# ============================================
+# TERRAFORM
+# ============================================
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+terraform.tfvars
+override.tf
+
+# ============================================
+# SENSITIVE FILES
+# ============================================
+*.key
+*.pem
+*.p12
+*.pfx
+*.jks
+.ssh/
+secrets/
+private/
+credentials/
+
+# ============================================
+# TEST COVERAGE
+# ============================================
+coverage/
+.nyc_output/
+.coverage
+htmlcov/
+
+# ============================================
+# OS
+# ============================================
+.DS_Store
+Thumbs.db
+*.tmp
+
+# ============================================
+# BACKUP & TEMPORARY FILES
+# ============================================
+*.bak
+*.backup
+*.tmp
+~*
+.#*
+
+# ============================================
+# IDE SPECIFIC
+# ============================================
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+.idea/*
+*.iml
+out/
+
+# ============================================
+# CERT/SSL
+# ============================================
+*.crt
+*.cert
+*.ca
+*.p7b

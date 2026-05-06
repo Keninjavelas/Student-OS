@@ -1,135 +1,131 @@
-# Student OS
+# Student OS — AI-Powered Campus Recruitment Platform
 
-Student OS is a B2B SaaS platform for digitizing the campus placement lifecycle and improving employability outcomes aligned with SDG 8 (Decent Work and Economic Growth).
+Student OS is a production-grade platform that helps students improve employability and helps institutions & companies discover qualified candidates using an AI-first approach.
 
-## Monorepo Structure
+This README consolidates product roadmap, production runbook, and developer quick-start instructions. Key sections below:
 
-- `frontend` - React + Vite + Tailwind + Redux Toolkit
-- `backend` - Node.js + Express + MongoDB (Mongoose)
-- `ai-service` - FastAPI microservice for ML/OpenAI-ready endpoints
-- `.github/workflows` - CI workflows
+- Overview & Monorepo
+- Quick Start (local)
+- AI Service (v2.0.0) — API docs
+- Product Roadmap (student & admin priorities)
+- Dev & Deployment notes
+- Security highlights
 
-## Current MVP Scope
+---
 
-- Student experience:
-  - Dashboard with readiness score, badges, DSA progress
-  - Resume builder with ATS scoring logic
-  - Skill verification test UI
-  - Mock interview workflow
-  - Settings page (theme, notifications, preferences)
-- Admin experience:
-  - Analytics dashboard
-  - Student table with filter, search, sort, pagination, CSV export
-  - Readiness distribution summary
-- Platform:
-  - Role-based route protection (student/admin)
-  - Fallback mock-data UX when backend is unavailable
-  - Dark mode support
-  - Frontend lint/test/build pipeline
+## Monorepo Layout
 
-## Tech Stack
-
-- Frontend: React, React Router, Redux Toolkit, Tailwind CSS, Vitest
-- Backend: Node.js, Express.js, Mongoose, dotenv, cors
-- AI Service: FastAPI, pydantic, scikit-learn
-- Data: MongoDB
-
-## Prerequisites
-
-- Node.js 20+ (recommended)
-- npm 10+
-- Python 3.11+
-- MongoDB (local or Atlas URI)
-
-## Environment Variables
-
-### Frontend (`frontend/.env`)
-
-- `VITE_BACKEND_URL=http://localhost:5000`
-- `VITE_STUDENT_USER_ID=` (optional)
-
-### Backend (`backend/.env`)
-
-- `PORT=5000`
-- `MONGO_URI=mongodb://127.0.0.1:27017/student-os`
-- `AI_SERVICE_URL=http://localhost:8000`
-
-### AI Service
-
-No required environment variables for current MVP endpoint.
-
-## Local Development
-
-Open 3 terminals from project root.
-
-### 1) Backend
-
-```bash
-cd backend
-npm install
-npm run start
+```
+Student-OS/
+├── frontend/               # React 18 + Redux + Vite
+├── backend/                # Node.js + Express + Mongoose
+├── ai-service/             # FastAPI ML microservice
+├── .github/workflows/      # CI/CD
+└── terraform/              # IaC (multi-cloud templates)
 ```
 
-Backend runs on `http://localhost:5000`.
+## Quick Start (local)
 
-### 2) AI Service
+Prereqs: Node 18+, Python 3.11+, Docker & Docker Compose
 
-```bash
-cd ai-service
-pip install -r requirements.txt
-python -m uvicorn main:app --reload --port 8000
-```
+1) Clone repo
 
-AI service runs on `http://127.0.0.1:8000`.
-
-### 3) Frontend
+2) Start all services via Docker Compose
 
 ```bash
-cd frontend
-npm install
-npm run dev
+docker-compose up -d
+# Frontend: http://localhost:3000
+# Backend: http://localhost:5000
+# AI Service: http://localhost:8000
 ```
 
-Frontend runs on `http://localhost:5173`.
+3) Development (optional): run services individually (backend, frontend, ai-service)
 
-## Useful Routes
+---
 
-- `/login` - Login
-- `/register` - Register
-- `/` - Student dashboard (student role)
-- `/resume` - Resume builder
-- `/skills` - Skill verification
-- `/mock-interview` - Mock interview
-- `/admin` - Admin analytics (admin role)
-- `/settings` - User settings
+## AI Service — v2.0.0 (summary)
 
-## Current API Highlights
+The AI service (ai-service/main.py) has been upgraded to MODEL_VERSION = "2.0.0" and exposes production-ready endpoints:
 
-- `POST /api/students/profile/:userId`
-  - Backend calls AI service `/predict-readiness`
-  - Persists returned `readinessScore` to MongoDB
-- `GET /api/students/profile/:userId`
-- `GET /api/admin/students`
-- AI service: `POST /predict-readiness`
+Endpoints (HTTP, Bearer token required):
 
-## Quality & CI
+- POST /predict-readiness-v2
+  - Input: student feature vector or student profile snapshot
+  - Output: { score: 0-100, confidence: 0-1, breakdown: {resume, skills, tests, interviews, verification}, trend: "improving"|"stable"|"needs_work" }
 
-Frontend checks:
+- POST /analyze-resume-v2
+  - Input: resume content or structured resume object
+  - Output: { totalScore, sectionScores, strengths:[], improvements:[], suggestions:[] }
 
-```bash
-cd frontend
-npm run lint
-npm run test
-npm run build
-```
+- POST /interview-feedback
+  - Input: { type: behavioral|technical|system, questions:[], responses:[], timeTaken }
+  - Output: { overallScore, communicationScore, technicalScore, analyticalScore, timeManagementScore, perQuestionFeedback: [] }
 
-GitHub Actions workflow `frontend-ci.yml` runs lint/test/build on push/PR affecting frontend files.
+Notes:
 
-## Notes
+- The ReadinessPredictorV2 is an ensemble (GradientBoostingRegressor + LinearRegression) trained on a 9-feature input and returns a confidence estimate and trend analysis.
+- ResumeAnalyzerV2 scores 8 dimensions and returns actionable suggestions.
+- InterviewFeedbackGenerator provides per-question guidance and example improved responses.
 
-- If MongoDB is not running, backend-dependent pages gracefully fall back to mock UI data.
-- Auth currently supports API-first behavior with local mock fallback accounts for demo continuity.
+Integration tips:
 
-## Next Steps
+- Backend routes should call the v2 endpoints and map the new fields into the StudentProfile's `resumes`, `mockInterviews`, and `scores` subdocuments.
+- Use `AI_SERVICE_SECRET` as Bearer token for secure calls from backend → ai-service.
 
-See `Tasks_Left.md` for full implementation and deployment backlog.
+---
+
+## Product Roadmap (high level)
+
+Phase 1 (Student Experience) — Highest priority
+- StudentDashboard: readiness gauge, next steps, activity feed
+- ResumeBuilder + AI analysis sidebar
+- MockInterview UI + AI feedback
+- SkillInventory + verification UI
+
+Phase 2 (Admin Experience) — Analytics first
+- AdminDashboard: cohort metrics, readiness distribution, exports
+- StudentAnalytics: filters, CSV export
+
+Phase 3 (AI Ecosystem Enhancements)
+- Placement prediction endpoint
+- Skill recommendation engine
+- Cohort-level intelligence and retraining pipelines
+
+---
+
+## Development & Deployment Notes
+
+- Local dev: `docker-compose up -d` (services: mongo, backend, ai-service, frontend)
+- Python: ai-service uses FastAPI + scikit-learn (ensure requirements.txt matches main.py imports)
+- CI/CD: GitHub Actions pipeline includes linting, security scans, tests, Docker build, and Terraform validation
+
+Production checklist (short)
+
+- Generate strong secrets for `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`, `AI_SERVICE_SECRET`
+- Configure `MONGODB_URI` for Atlas or managed DB
+- Ensure object storage (S3/Blob/GCS) for resume uploads
+- Configure monitoring: logs, metrics, traces
+
+---
+
+## Security Highlights
+
+- JWT + HttpOnly refresh cookie strategy
+- Account lockout after 5 failed attempts (30 min)
+- Zod validation on all inputs
+- Helmet, CSP, XSS sanitization, CSRF protections
+- Rate limiting with production-ready swap to Redis
+
+---
+
+## Where to look next
+
+- `Tasks_Left.md` — current sprint items and priorities (AI-first)
+- `ai-service/main.py` — AI models & endpoints (v2.0.0)
+- `backend/routes/studentRoutes.js` — integration points to AI service
+
+If you want, I can now:
+- run a quick scan to verify backend calls use the v2 endpoints, or
+- finish merging remaining sections from PRODUCT_ROADMAP.md into README (detailed page-by-page specs), or
+- add example request/response payloads for each AI v2 endpoint directly into this README.
+

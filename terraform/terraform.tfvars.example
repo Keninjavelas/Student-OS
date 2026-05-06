@@ -1,0 +1,88 @@
+# ============================================
+# GENERAL CONFIGURATION
+# ============================================
+
+cloud_provider = "aws"  # Options: aws, azure, gcp
+environment    = "prod"  # Options: dev, staging, prod
+region         = "us-east-1"  # Region varies by cloud provider
+app_name       = "student-os"
+
+# ============================================
+# BACKEND CONFIGURATION
+# ============================================
+
+backend_container_image = "student-os-backend:latest"
+backend_port            = 5000
+backend_replicas        = 3
+backend_cpu             = 512    # millicores
+backend_memory          = 1024   # MB
+
+# ============================================
+# AI SERVICE CONFIGURATION
+# ============================================
+
+ai_service_container_image = "student-os-ai:latest"
+ai_service_port            = 8000
+ai_service_replicas        = 2
+ai_service_cpu             = 512    # millicores
+ai_service_memory          = 2048   # MB
+
+# ============================================
+# DATABASE CONFIGURATION
+# ============================================
+
+# MongoDB Atlas credentials (from environment variables in CI/CD)
+mongodb_cluster_name = "student-os-prod"
+mongodb_instance_size = "M10"  # Choose based on your needs: M0, M5, M10, M20, M30
+
+# These should be set via environment variables or terraform.tfvars that's not committed:
+# mongodb_atlas_org_id         = ""
+# mongodb_atlas_api_public_key = ""
+# mongodb_atlas_api_private_key = ""
+
+# ============================================
+# STORAGE CONFIGURATION
+# ============================================
+
+storage_bucket_name = "student-os-frontend-assets"
+enable_cdn          = true
+cdn_ttl             = 3600  # 1 hour
+
+# ============================================
+# NETWORKING CONFIGURATION
+# ============================================
+
+vpc_cidr                = "10.0.0.0/16"
+enable_nat_gateway      = true
+allowed_ingress_cidrs   = ["0.0.0.0/0"]  # Restrict in production
+
+# ============================================
+# SECURITY CONFIGURATION (use env vars in production)
+# ============================================
+
+# These should be set via environment variables or terraform.tfvars that's not committed:
+# jwt_access_secret      = ""
+# jwt_refresh_secret     = ""
+# ai_service_secret      = ""
+
+cors_origin       = "https://yourdomain.com"
+enable_https      = true
+certificate_arn   = ""  # Set for AWS
+
+# ============================================
+# OBSERVABILITY CONFIGURATION
+# ============================================
+
+enable_monitoring    = true
+log_retention_days   = 30
+enable_alerting      = true
+alert_email          = "ops@yourdomain.com"
+
+# ============================================
+# SCALING CONFIGURATION
+# ============================================
+
+autoscaling_enabled        = true
+autoscaling_min_replicas   = 2
+autoscaling_max_replicas   = 10
+autoscaling_target_cpu     = 70

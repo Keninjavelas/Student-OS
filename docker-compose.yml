@@ -1,0 +1,138 @@
+version: '3.8'
+
+services:
+  # ============================================
+  # MONGODB
+  # ============================================
+  mongodb:
+    image: mongo:7.0
+    container_name: student-os-mongodb
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: password
+      MONGO_INITDB_DATABASE: student-os
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+      - ./mongodb-init.js:/docker-entrypoint-initdb.d/init.js
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - student-os
+
+  # ============================================
+  # BACKEND
+  # ============================================
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: student-os-backend
+    restart: unless-stopped
+    environment:
+      NODE_ENV: development
+      PORT: 5000
+      MONGODB_URI: mongodb://admin:password@mongodb:27017/student-os?authSource=admin
+      JWT_ACCESS_SECRET: dev-access-secret-change-in-production-min-32-chars
+      JWT_REFRESH_SECRET: dev-refresh-secret-change-in-production-min-32-chars
+      AI_SERVICE_URL: http://ai-service:8000
+      AI_SERVICE_SECRET: dev-ai-service-secret
+      CORS_ORIGIN: http://localhost:3000,http://localhost:5173
+      LOG_LEVEL: info
+    ports:
+      - "5000:5000"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+    networks:
+      - student-os
+    healthcheck:
+      test: curl -f http://localhost:5000/health || exit 1
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ============================================
+  # AI SERVICE
+  # ============================================
+  ai-service:
+    build:
+      context: ./ai-service
+      dockerfile: Dockerfile
+    container_name: student-os-ai-service
+    restart: unless-stopped
+    environment:
+      NODE_ENV: development
+      PORT: 8000
+      AI_SERVICE_SECRET: dev-ai-service-secret
+      CORS_ORIGIN: http://localhost:5000,http://localhost:3000
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./ai-service:/app
+    networks:
+      - student-os
+    healthcheck:
+      test: curl -f http://localhost:8000/health || exit 1
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ============================================
+  # FRONTEND (optional - for development)
+  # ============================================
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+      args:
+        - VITE_API_URL=http://localhost:5000
+    container_name: student-os-frontend
+    restart: unless-stopped
+    environment:
+      VITE_API_URL: http://localhost:5000
+    ports:
+      - "3000:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    networks:
+      - student-os
+    depends_on:
+      - backend
+
+  # ============================================
+  # MONGO EXPRESS (optional - for database management)
+  # ============================================
+  mongo-express:
+    image: mongo-express:latest
+    container_name: student-os-mongo-express
+    restart: unless-stopped
+    environment:
+      ME_CONFIG_MONGODB_ADMINUSERNAME: admin
+      ME_CONFIG_MONGODB_ADMINPASSWORD: password
+      ME_CONFIG_MONGODB_URL: mongodb://admin:password@mongodb:27017/
+      ME_CONFIG_BASICAUTH_USERNAME: admin
+      ME_CONFIG_BASICAUTH_PASSWORD: password
+    ports:
+      - "8081:8081"
+    depends_on:
+      - mongodb
+    networks:
+      - student-os
+
+volumes:
+  mongodb_data:
+    driver: local
+
+networks:
+  student-os:
+    driver: bridge
