@@ -5,6 +5,7 @@ import adminReducer from "./slices/adminSlice";
 import resumeReducer from "./slices/resumeSlice";
 import skillsReducer from "./slices/skillsSlice";
 import settingsReducer from "./slices/settingsSlice";
+import interviewReducer from "./slices/interviewSlice";
 
 export const store = configureStore({
   reducer: {
@@ -13,6 +14,7 @@ export const store = configureStore({
     admin: adminReducer,
     resume: resumeReducer,
     skills: skillsReducer,
-    settings: settingsReducer
+    settings: settingsReducer,
+    interview: interviewReducer
   }
 });

@@ -88,6 +88,14 @@ export const apiClient = {
       headers,
       body: JSON.stringify(body)
     }),
+  patch: (path, body = {}, headers = {}) =>
+    request(path, {
+      method: "PATCH",
+      headers,
+      body: JSON.stringify(body)
+    }),
+  delete: (path, headers = {}) =>
+    request(path, { method: "DELETE", headers }),
   setStoredAuth,
   clearStoredAuth
 };

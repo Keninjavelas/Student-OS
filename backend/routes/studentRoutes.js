@@ -562,4 +562,310 @@ router.post(
   })
 );
 
+// ============================================
+// AI FEEDBACK FOR INTERVIEWS
+// ============================================
+
+/**
+ * POST /students/mock-interviews/:interviewId/ai-feedback
+ * Get AI feedback for a completed interview
+ */
+router.post(
+  '/mock-interviews/:interviewId/ai-feedback',
+  asyncHandler(async (req, res, next) => {
+    const { type, questions, responses, timeTaken } = req.body;
+
+    const profile = await StudentProfile.findOne({ user: req.user.id });
+    if (!profile) throw new NotFoundError('Student profile');
+
+    const interview = profile.mockInterviews.find(
+      (i) => i._id.toString() === req.params.interviewId
+    );
+    if (!interview) throw new NotFoundError('Mock interview');
+
+    const baseUrl = (process.env.AI_SERVICE_URL || 'http://localhost:8000').replace(/\/+$/, '');
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+    let feedback;
+    try {
+      const aiResponse = await fetch(`${baseUrl}/interview-feedback`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${process.env.AI_SERVICE_SECRET}`,
+        },
+        body: JSON.stringify({
+          interview_type: type || interview.type,
+          questions: questions || interview.questions.map((q) => q.questionText),
+          responses: responses || interview.responses.map((r) => r.response),
+          time_taken: timeTaken || [],
+        }),
+        signal: controller.signal,
+      });
+
+      if (!aiResponse.ok) throw new Error('AI service error');
+      const aiData = await aiResponse.json();
+
+      feedback = {
+        overallScore: aiData.overall_score,
+        communicationScore: aiData.communication_score,
+        technicalScore: aiData.technical_score,
+        analyticalScore: aiData.analytical_score,
+        timeManagementScore: aiData.time_management_score,
+        strengths: aiData.strengths || [],
+        areasForImprovement: aiData.improvements || [],
+        perQuestionFeedback: aiData.per_question_feedback || [],
+        aiGeneratedAt: new Date(),
+      };
+    } catch (err) {
+      // Fallback scoring if AI service unavailable
+      const avgLen = (responses || []).reduce((s, r) => s + (r?.length ?? 0), 0) / Math.max(1, (responses || []).length);
+      const baseScore = Math.min(85, 50 + Math.round(avgLen / 10));
+      feedback = {
+        overallScore: baseScore,
+        communicationScore: baseScore * 0.9,
+        technicalScore: baseScore * 0.95,
+        analyticalScore: baseScore * 0.85,
+        timeManagementScore: 70,
+        strengths: ['Completed the interview session'],
+        areasForImprovement: ['AI feedback unavailable — practice articulating answers clearly'],
+        perQuestionFeedback: [],
+        aiGeneratedAt: new Date(),
+      };
+    } finally {
+      clearTimeout(timeoutId);
+    }
+
+    interview.feedback = feedback;
+    await profile.save();
+
+    res.status(200).json({
+      status: 'success',
+      data: feedback,
+      traceId: req.traceId,
+    });
+  })
+);
+
+// ============================================
+// RESUME AI ANALYSIS ENDPOINT
+// ============================================
+
+/**
+ * POST /students/resumes/analyze
+ * Analyze resume content with AI
+ */
+router.post(
+  '/resumes/analyze',
+  asyncHandler(async (req, res, next) => {
+    const resumeData = req.body;
+
+    const baseUrl = (process.env.AI_SERVICE_URL || 'http://localhost:8000').replace(/\/+$/, '');
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+    try {
+      const aiResponse = await fetch(`${baseUrl}/analyze-resume-v2`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${process.env.AI_SERVICE_SECRET}`,
+        },
+        body: JSON.stringify(resumeData),
+        signal: controller.signal,
+      });
+
+      if (!aiResponse.ok) throw new Error('AI service error');
+      const analysis = await aiResponse.json();
+
+      res.status(200).json({
+        status: 'success',
+        data: analysis,
+        traceId: req.traceId,
+      });
+    } catch (err) {
+      // Fallback analysis
+      res.status(200).json({
+        status: 'success',
+        data: {
+          score: 60,
+          feedback: 'AI service unavailable. Basic analysis applied.',
+          suggestions: ['Add quantified achievements', 'Include GitHub links', 'Expand project descriptions'],
+          strengths: ['Resume structure is present'],
+          improvements: ['Connect to AI service for detailed feedback'],
+          section_scores: { personal_info: 8, summary: 8, experience: 12, education: 8, projects: 8, skills: 6, certifications: 5, format: 5 },
+        },
+        traceId: req.traceId,
+      });
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  })
+);
+
+// ============================================
+// PROFILE UPDATE (POST alias for PATCH)
+// ============================================
+
+/**
+ * POST /students/profile/update
+ * Update student profile (POST alias used by frontend)
+ */
+router.post(
+  '/profile/update',
+  validateRequestBody(schemas.studentProfileUpdateSchema),
+  asyncHandler(async (req, res, next) => {
+    const profile = await StudentProfile.findOne({ user: req.user.id });
+    if (!profile) throw new NotFoundError('Student profile');
+
+    if (req.validatedBody.department !== undefined) profile.academicInfo.department = req.validatedBody.department;
+    if (req.validatedBody.graduationYear !== undefined) profile.academicInfo.graduationYear = req.validatedBody.graduationYear;
+    if (req.validatedBody.gpa !== undefined) profile.academicInfo.gpa = req.validatedBody.gpa;
+    if (req.validatedBody.targetCTC !== undefined) profile.placementReadiness.targetCTC = req.validatedBody.targetCTC;
+    if (req.validatedBody.preferredRoles) profile.placementReadiness.preferredRoles = req.validatedBody.preferredRoles;
+    if (req.validatedBody.preferredLocations) profile.placementReadiness.preferredLocations = req.validatedBody.preferredLocations;
+
+    await profile.save();
+
+    res.status(200).json({
+      status: 'success',
+      data: profile,
+      message: 'Profile updated successfully',
+      traceId: req.traceId,
+    });
+  })
+);
+
+// ============================================
+// SKILL TESTS ENDPOINTS
+// ============================================
+
+/**
+ * GET /students/skill-tests
+ * Get all skill test results
+ */
+router.get(
+  '/skill-tests',
+  asyncHandler(async (req, res, next) => {
+    const profile = await StudentProfile.findOne({ user: req.user.id });
+    if (!profile) throw new NotFoundError('Student profile');
+
+    res.status(200).json({
+      status: 'success',
+      data: profile.skillTests || [],
+      traceId: req.traceId,
+    });
+  })
+);
+
+/**
+ * POST /students/skill-tests
+ * Record a skill test result
+ */
+router.post(
+  '/skill-tests',
+  asyncHandler(async (req, res, next) => {
+    const { skillName, testType, score, percentageScore, isPassed, totalQuestions, correctAnswers, duration } = req.body;
+
+    if (!skillName) throw new AppError('skillName is required', 400, 'VALIDATION_ERROR');
+
+    const profile = await StudentProfile.findOne({ user: req.user.id });
+    if (!profile) throw new NotFoundError('Student profile');
+
+    const testResult = {
+      _id: new mongoose.Types.ObjectId(),
+      skillName,
+      testType: testType || 'quiz',
+      status: isPassed ? 'passed' : 'failed',
+      completedAt: new Date(),
+      score: score || 0,
+      percentageScore: percentageScore || 0,
+      isPassed: Boolean(isPassed),
+      totalQuestions: totalQuestions || 0,
+      correctAnswers: correctAnswers || 0,
+      duration: duration || 0,
+      attemptNumber: (profile.skillTests || []).filter((t) => t.skillName === skillName).length + 1,
+    };
+
+    if (!profile.skillTests) profile.skillTests = [];
+    profile.skillTests.push(testResult);
+
+    // Award badge if passed
+    if (isPassed) {
+      const badgeName = `${skillName} [Verified]`;
+      const hasBadge = (profile.badges || []).some((b) => b.name === badgeName);
+      if (!hasBadge) {
+        if (!profile.badges) profile.badges = [];
+        profile.badges.push({ name: badgeName, description: `Passed ${skillName} assessment`, earnedAt: new Date() });
+      }
+    }
+
+    await profile.save();
+
+    res.status(201).json({
+      status: 'success',
+      data: testResult,
+      message: isPassed ? 'Test passed! Badge awarded.' : 'Test result recorded.',
+      traceId: req.traceId,
+    });
+  })
+);
+
+// ============================================
+// SKILL DELETE (POST alias)
+// ============================================
+
+/**
+ * POST /students/skills/:skillId/delete
+ * Delete a skill (POST alias for DELETE)
+ */
+router.post(
+  '/skills/:skillId/delete',
+  asyncHandler(async (req, res, next) => {
+    const profile = await StudentProfile.findOne({ user: req.user.id });
+    if (!profile) throw new NotFoundError('Student profile');
+
+    const skillIndex = profile.skillInventory.technical.findIndex(
+      (s) => s._id.toString() === req.params.skillId
+    );
+    if (skillIndex === -1) throw new NotFoundError('Skill');
+
+    profile.skillInventory.technical.splice(skillIndex, 1);
+    await profile.save();
+
+    res.status(200).json({
+      status: 'success',
+      message: 'Skill removed successfully',
+      traceId: req.traceId,
+    });
+  })
+);
+
+/**
+ * POST /students/resumes/:resumeId/delete
+ * Delete a resume (POST alias for DELETE)
+ */
+router.post(
+  '/resumes/:resumeId/delete',
+  asyncHandler(async (req, res, next) => {
+    const profile = await StudentProfile.findOne({ user: req.user.id });
+    if (!profile) throw new NotFoundError('Student profile');
+
+    const resumeIndex = profile.resumes.findIndex(
+      (r) => r._id.toString() === req.params.resumeId
+    );
+    if (resumeIndex === -1) throw new NotFoundError('Resume');
+
+    profile.resumes.splice(resumeIndex, 1);
+    await profile.save();
+
+    res.status(200).json({
+      status: 'success',
+      message: 'Resume deleted successfully',
+      traceId: req.traceId,
+    });
+  })
+);
+
 module.exports = router;

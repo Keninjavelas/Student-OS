@@ -5,13 +5,13 @@ import { logoutLocal, logoutUser } from "../store/slices/authSlice";
 const studentLinks = [
   { to: "/", label: "Dashboard" },
   { to: "/resume", label: "Resume Builder" },
-  { to: "/skills", label: "Skill Tests" },
+  { to: "/skills", label: "Skills & Tests" },
   { to: "/mock-interview", label: "Mock Interview" },
   { to: "/settings", label: "Settings" }
 ];
 
 const adminLinks = [
-  { to: "/admin", label: "Admin Analytics" },
+  { to: "/admin", label: "Analytics" },
   { to: "/settings", label: "Settings" }
 ];
 
