@@ -8,26 +8,33 @@ import ErrorBoundary from "./components/ErrorBoundary";
 import RouteSkeleton from "./components/ui/RouteSkeleton";
 import { fetchCurrentUser, logoutLocal } from "./store/slices/authSlice";
 
-const StudentDashboard = lazy(() => import("./pages/StudentDashboard"));
-const AdminDashboard = lazy(() => import("./pages/AdminDashboard"));
-const ResumeBuilder = lazy(() => import("./pages/ResumeBuilder"));
+// Student pages
+const StudentDashboard  = lazy(() => import("./pages/StudentDashboard"));
+const ResumeBuilder     = lazy(() => import("./pages/ResumeBuilder"));
 const SkillVerification = lazy(() => import("./pages/SkillVerification"));
-const MockInterview = lazy(() => import("./pages/MockInterview"));
-const SettingsPage = lazy(() => import("./pages/SettingsPage"));
-const LoginPage = lazy(() => import("./pages/auth/LoginPage"));
+const MockInterview     = lazy(() => import("./pages/MockInterview"));
+const RoadmapPage       = lazy(() => import("./pages/RoadmapPage"));
+const SkillRankingPage  = lazy(() => import("./pages/SkillRankingPage"));
+const JobBoardPage      = lazy(() => import("./pages/JobBoardPage"));
+const SettingsPage      = lazy(() => import("./pages/SettingsPage"));
+
+// Admin pages
+const AdminDashboard    = lazy(() => import("./pages/AdminDashboard"));
+const CohortStatsPage   = lazy(() => import("./pages/admin/CohortStatsPage"));
+const SkillGapPage      = lazy(() => import("./pages/admin/SkillGapPage"));
+const UserManagementPage = lazy(() => import("./pages/admin/UserManagementPage"));
+
+// Auth pages
+const LoginPage    = lazy(() => import("./pages/auth/LoginPage"));
 const RegisterPage = lazy(() => import("./pages/auth/RegisterPage"));
 
 function App() {
   const dispatch = useDispatch();
 
-  useEffect(() => {
-    dispatch(fetchCurrentUser());
-  }, [dispatch]);
+  useEffect(() => { dispatch(fetchCurrentUser()); }, [dispatch]);
 
   useEffect(() => {
-    function handleAuthExpired() {
-      dispatch(logoutLocal());
-    }
+    function handleAuthExpired() { dispatch(logoutLocal()); }
     window.addEventListener("auth:expired", handleAuthExpired);
     return () => window.removeEventListener("auth:expired", handleAuthExpired);
   }, [dispatch]);
@@ -37,73 +44,32 @@ function App() {
       <BrowserRouter>
         <Suspense fallback={<RouteSkeleton />}>
           <Routes>
-        <Route
-          path="/login"
-          element={
-            <PublicOnlyRoute>
-              <LoginPage />
-            </PublicOnlyRoute>
-          }
-        />
-        <Route
-          path="/register"
-          element={
-            <PublicOnlyRoute>
-              <RegisterPage />
-            </PublicOnlyRoute>
-          }
-        />
-        <Route element={<MainLayout />}>
-          <Route
-            path="/"
-            element={
-              <ProtectedRoute allowedRoles={["student"]}>
-                <StudentDashboard />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/resume"
-            element={
-              <ProtectedRoute allowedRoles={["student"]}>
-                <ResumeBuilder />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/skills"
-            element={
-              <ProtectedRoute allowedRoles={["student"]}>
-                <SkillVerification />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/mock-interview"
-            element={
-              <ProtectedRoute allowedRoles={["student"]}>
-                <MockInterview />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/admin"
-            element={
-              <ProtectedRoute allowedRoles={["admin"]}>
-                <AdminDashboard />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/settings"
-            element={
-              <ProtectedRoute allowedRoles={["student", "admin"]}>
-                <SettingsPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route path="*" element={<Navigate to="/login" replace />} />
-        </Route>
+            {/* Public */}
+            <Route path="/login"    element={<PublicOnlyRoute><LoginPage /></PublicOnlyRoute>} />
+            <Route path="/register" element={<PublicOnlyRoute><RegisterPage /></PublicOnlyRoute>} />
+
+            {/* Protected — shared layout */}
+            <Route element={<MainLayout />}>
+              {/* Student */}
+              <Route path="/"              element={<ProtectedRoute allowedRoles={["student"]}><StudentDashboard /></ProtectedRoute>} />
+              <Route path="/resume"        element={<ProtectedRoute allowedRoles={["student"]}><ResumeBuilder /></ProtectedRoute>} />
+              <Route path="/skills"        element={<ProtectedRoute allowedRoles={["student"]}><SkillVerification /></ProtectedRoute>} />
+              <Route path="/mock-interview" element={<ProtectedRoute allowedRoles={["student"]}><MockInterview /></ProtectedRoute>} />
+              <Route path="/roadmap"       element={<ProtectedRoute allowedRoles={["student"]}><RoadmapPage /></ProtectedRoute>} />
+              <Route path="/ranking"       element={<ProtectedRoute allowedRoles={["student"]}><SkillRankingPage /></ProtectedRoute>} />
+              <Route path="/jobs"          element={<ProtectedRoute allowedRoles={["student"]}><JobBoardPage /></ProtectedRoute>} />
+
+              {/* Admin */}
+              <Route path="/admin"              element={<ProtectedRoute allowedRoles={["admin"]}><AdminDashboard /></ProtectedRoute>} />
+              <Route path="/admin/cohorts"      element={<ProtectedRoute allowedRoles={["admin"]}><CohortStatsPage /></ProtectedRoute>} />
+              <Route path="/admin/skill-gaps"   element={<ProtectedRoute allowedRoles={["admin"]}><SkillGapPage /></ProtectedRoute>} />
+              <Route path="/admin/users"        element={<ProtectedRoute allowedRoles={["admin"]}><UserManagementPage /></ProtectedRoute>} />
+
+              {/* Shared */}
+              <Route path="/settings" element={<ProtectedRoute allowedRoles={["student", "admin"]}><SettingsPage /></ProtectedRoute>} />
+
+              <Route path="*" element={<Navigate to="/login" replace />} />
+            </Route>
           </Routes>
         </Suspense>
       </BrowserRouter>

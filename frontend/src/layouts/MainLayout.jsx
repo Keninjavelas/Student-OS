@@ -2,6 +2,7 @@ import { Outlet } from "react-router-dom";
 import { useEffect } from "react";
 import { useSelector } from "react-redux";
 import Navbar from "../components/Navbar";
+import XpToast from "../components/ui/XpToast";
 
 function MainLayout() {
   const { theme } = useSelector((state) => state.settings);
@@ -16,6 +17,7 @@ function MainLayout() {
       <main className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
         <Outlet />
       </main>
+      <XpToast />
     </div>
   );
 }

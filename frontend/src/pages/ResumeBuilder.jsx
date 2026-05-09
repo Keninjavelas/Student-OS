@@ -7,6 +7,8 @@ import {
   analyzeResumeAI,
   clearAnalysis
 } from "../store/slices/resumeSlice";
+import { awardXp, XP_AWARDS } from "../store/slices/gamificationSlice";
+import { pushNotification } from "../store/slices/notificationSlice";
 import Card from "../components/ui/Card";
 import Button from "../components/ui/Button";
 import Badge from "../components/ui/Badge";
@@ -182,7 +184,15 @@ function ResumeBuilder() {
       has_github: hasGithub,
       has_portfolio: hasPortfolio,
       has_quantified_achievements: hasQuantified
-    }));
+    })).then(result => {
+      if (!result.error) {
+        const score = result.payload?.score ?? 0;
+        dispatch(awardXp({ amount: XP_AWARDS.RESUME_ANALYZED, reason: "Analyzed resume with AI", badgeCheck: score >= 75 ? ["resume_score_75"] : [] }));
+        if (score >= 75) {
+          dispatch(pushNotification({ type: "success", title: "Strong Resume!", message: `Your resume scored ${score}/100. Badge unlocked!`, link: "/resume" }));
+        }
+      }
+    });
   }
 
   async function handleSave(e) {
@@ -192,6 +202,8 @@ function ResumeBuilder() {
     if (!result.error) {
       setShowSave(false);
       setSaveTitle("");
+      dispatch(awardXp({ amount: XP_AWARDS.RESUME_CREATED, reason: "Created a resume", badgeCheck: ["first_resume"] }));
+      dispatch(pushNotification({ type: "success", title: "Resume saved!", message: `"${saveTitle}" has been saved.`, link: "/resume" }));
       showToast("Resume saved successfully.");
       setActiveTab("list");
     } else {

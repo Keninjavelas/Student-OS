@@ -6,6 +6,10 @@ import resumeReducer from "./slices/resumeSlice";
 import skillsReducer from "./slices/skillsSlice";
 import settingsReducer from "./slices/settingsSlice";
 import interviewReducer from "./slices/interviewSlice";
+import gamificationReducer from "./slices/gamificationSlice";
+import roadmapReducer from "./slices/roadmapSlice";
+import notificationReducer from "./slices/notificationSlice";
+import jobsReducer from "./slices/jobsSlice";
 
 export const store = configureStore({
   reducer: {
@@ -15,6 +19,10 @@ export const store = configureStore({
     resume: resumeReducer,
     skills: skillsReducer,
     settings: settingsReducer,
-    interview: interviewReducer
+    interview: interviewReducer,
+    gamification: gamificationReducer,
+    roadmap: roadmapReducer,
+    notifications: notificationReducer,
+    jobs: jobsReducer,
   }
 });

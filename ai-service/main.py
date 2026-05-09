@@ -2,7 +2,7 @@ import os
 import logging
 import time
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import Optional, List
 import json
 
 from fastapi import FastAPI, Depends, HTTPException, Header, Request
@@ -12,6 +12,8 @@ from pydantic import BaseModel, Field, validator
 import numpy as np
 from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import LinearRegression
+from sklearn.ensemble import GradientBoostingRegressor
+import uuid
 import json_logger
 
 # ============================================
@@ -114,6 +116,31 @@ class PlacementPredictionResponse(BaseModel):
     recommended_actions: List[str]
     estimated_placement_months: float
     model_version: str
+
+class SkillRecommendationRequest(BaseModel):
+    current_skills: List[str] = Field(default_factory=list)
+    target_role: str = ""
+    readiness_score: float = Field(default=50, ge=0, le=100)
+    test_results: List[dict] = Field(default_factory=list)
+
+class RoadmapRequest(BaseModel):
+    current_skills: List[str] = Field(default_factory=list)
+    target_role: str = ""
+    readiness_score: float = Field(default=50, ge=0, le=100)
+    graduation_months_away: float = Field(default=12, ge=0)
+    weak_areas: List[str] = Field(default_factory=list)
+    completed_milestones: List[str] = Field(default_factory=list)
+
+class PlacementPredictionRequest(BaseModel):
+    readiness_score: float = Field(..., ge=0, le=100)
+    skills_count: int = Field(default=0, ge=0)
+    advanced_skills_count: int = Field(default=0, ge=0)
+    resumes_count: int = Field(default=0, ge=0)
+    interviews_completed: int = Field(default=0, ge=0)
+    avg_interview_score: float = Field(default=0, ge=0, le=100)
+    tests_passed: int = Field(default=0, ge=0)
+    graduation_months_away: float = Field(default=12, ge=0)
+    target_ctc: float = Field(default=0, ge=0)
 
 class HealthResponse(BaseModel):
     status: str
@@ -627,6 +654,335 @@ async def generate_interview_feedback(
     except Exception as e:
         logger.error(f"Interview feedback error: {str(e)}")
         raise HTTPException(status_code=500, detail="Feedback generation failed")
+
+@app.post("/recommend-skills")
+async def recommend_skills(
+    request: SkillRecommendationRequest,
+    authorization: str = Header(None)
+):
+    """Recommend top skills to learn based on current profile and target role"""
+    verify_api_key(authorization)
+
+    ROLE_SKILL_MAP = {
+        "frontend": ["React", "TypeScript", "CSS/Tailwind", "Next.js", "Testing (Jest/Vitest)", "Web Performance", "Accessibility"],
+        "backend": ["Node.js", "System Design", "PostgreSQL", "Redis", "Docker", "REST API Design", "Message Queues"],
+        "fullstack": ["React", "Node.js", "TypeScript", "PostgreSQL", "Docker", "System Design", "CI/CD"],
+        "data": ["Python", "SQL", "Machine Learning", "Pandas/NumPy", "Data Visualization", "Statistics", "Spark"],
+        "devops": ["Docker", "Kubernetes", "Terraform", "CI/CD", "AWS/GCP/Azure", "Linux", "Monitoring"],
+        "default": ["Data Structures & Algorithms", "System Design", "SQL", "Git", "REST APIs", "Testing", "Cloud Basics"]
+    }
+
+    SKILL_RESOURCES = {
+        "React": "https://react.dev/learn",
+        "TypeScript": "https://www.typescriptlang.org/docs/",
+        "System Design": "https://github.com/donnemartin/system-design-primer",
+        "Data Structures & Algorithms": "https://leetcode.com",
+        "SQL": "https://sqlzoo.net",
+        "Docker": "https://docs.docker.com/get-started/",
+        "Node.js": "https://nodejs.org/en/learn",
+        "Python": "https://docs.python.org/3/tutorial/",
+        "Machine Learning": "https://www.coursera.org/learn/machine-learning",
+        "default": "https://roadmap.sh"
+    }
+
+    SALARY_IMPACT = {
+        "System Design": 25,
+        "React": 18,
+        "TypeScript": 15,
+        "Node.js": 15,
+        "Docker": 12,
+        "Kubernetes": 20,
+        "Machine Learning": 30,
+        "Data Structures & Algorithms": 20,
+        "SQL": 10,
+        "Python": 15,
+        "default": 10
+    }
+
+    TIME_TO_PROFICIENCY = {
+        "React": 8,
+        "TypeScript": 6,
+        "System Design": 16,
+        "Docker": 4,
+        "Kubernetes": 12,
+        "Machine Learning": 20,
+        "Data Structures & Algorithms": 12,
+        "SQL": 4,
+        "Python": 8,
+        "Node.js": 8,
+        "default": 8
+    }
+
+    role_key = "default"
+    role_lower = request.target_role.lower()
+    for key in ROLE_SKILL_MAP:
+        if key in role_lower:
+            role_key = key
+            break
+
+    target_skills = ROLE_SKILL_MAP[role_key]
+    current_lower = [s.lower() for s in request.current_skills]
+    missing = [s for s in target_skills if s.lower() not in current_lower]
+
+    # Score missing skills by impact
+    scored = []
+    for skill in missing[:8]:
+        impact = SALARY_IMPACT.get(skill, SALARY_IMPACT["default"])
+        time_weeks = TIME_TO_PROFICIENCY.get(skill, TIME_TO_PROFICIENCY["default"])
+        roi = impact / max(1, time_weeks)
+        scored.append({
+            "skill": skill,
+            "reason": f"High demand for {request.target_role or 'software'} roles",
+            "priority": "high" if roi > 2 else "medium" if roi > 1 else "low",
+            "estimated_salary_impact_pct": impact,
+            "estimated_weeks_to_proficiency": time_weeks,
+            "resource_url": SKILL_RESOURCES.get(skill, SKILL_RESOURCES["default"])
+        })
+
+    scored.sort(key=lambda x: x["estimated_salary_impact_pct"], reverse=True)
+    top = scored[:5]
+
+    return {
+        "target_role": request.target_role or "Software Engineer",
+        "current_skill_count": len(request.current_skills),
+        "gap_count": len(missing),
+        "recommendations": top,
+        "model_version": MODEL_VERSION
+    }
+
+
+@app.post("/generate-roadmap")
+async def generate_roadmap(
+    request: RoadmapRequest,
+    authorization: str = Header(None)
+):
+    """Generate a personalised AI learning roadmap with milestones"""
+    verify_api_key(authorization)
+
+    PHASE_TEMPLATES = {
+        "foundation": {
+            "title": "Foundation",
+            "description": "Build core fundamentals that every engineer needs",
+            "skills": ["Data Structures & Algorithms", "SQL", "Git & Version Control", "REST APIs"],
+            "duration_weeks": 6,
+            "resources": ["LeetCode Easy/Medium", "SQLZoo", "Pro Git Book"]
+        },
+        "core_skills": {
+            "title": "Core Technical Skills",
+            "description": "Master the primary technologies for your target role",
+            "skills": [],
+            "duration_weeks": 8,
+            "resources": ["Official documentation", "Build 2 projects"]
+        },
+        "advanced": {
+            "title": "Advanced & System Design",
+            "description": "Level up with architecture, performance, and scalability",
+            "skills": ["System Design", "Performance Optimization", "Security Basics"],
+            "duration_weeks": 6,
+            "resources": ["System Design Primer", "Designing Data-Intensive Applications"]
+        },
+        "interview_prep": {
+            "title": "Interview Preparation",
+            "description": "Targeted practice for placement interviews",
+            "skills": ["Mock Interviews", "Behavioural Questions", "Company Research"],
+            "duration_weeks": 4,
+            "resources": ["Student OS Mock Interviews", "Glassdoor", "LeetCode Top 150"]
+        },
+        "placement": {
+            "title": "Active Placement",
+            "description": "Apply, interview, and land your offer",
+            "skills": ["Resume Polish", "Networking", "Offer Negotiation"],
+            "duration_weeks": 4,
+            "resources": ["LinkedIn", "AngelList", "Company career pages"]
+        }
+    }
+
+    ROLE_CORE_SKILLS = {
+        "frontend": ["React", "TypeScript", "CSS/Tailwind", "Testing"],
+        "backend": ["Node.js/Python", "Databases", "Docker", "APIs"],
+        "fullstack": ["React", "Node.js", "Databases", "Docker"],
+        "data": ["Python", "Pandas", "Machine Learning", "SQL"],
+        "devops": ["Docker", "Kubernetes", "CI/CD", "Cloud"],
+        "default": ["Programming Fundamentals", "Web Basics", "Databases", "APIs"]
+    }
+
+    role_key = "default"
+    for key in ROLE_CORE_SKILLS:
+        if key in request.target_role.lower():
+            role_key = key
+            break
+
+    phases = []
+    week_offset = 0
+
+    # Phase 1: Foundation (skip if readiness > 60)
+    if request.readiness_score < 60:
+        p = dict(PHASE_TEMPLATES["foundation"])
+        p["start_week"] = week_offset + 1
+        p["end_week"] = week_offset + p["duration_weeks"]
+        p["status"] = "completed" if "foundation" in request.completed_milestones else "active" if week_offset == 0 else "upcoming"
+        p["milestones"] = [
+            {"id": "m1", "title": "Solve 50 LeetCode Easy problems", "xp": 200},
+            {"id": "m2", "title": "Complete SQL basics course", "xp": 150},
+            {"id": "m3", "title": "Build a CRUD REST API", "xp": 250}
+        ]
+        phases.append(p)
+        week_offset += p["duration_weeks"]
+
+    # Phase 2: Core skills
+    p = dict(PHASE_TEMPLATES["core_skills"])
+    p["skills"] = ROLE_CORE_SKILLS[role_key]
+    p["start_week"] = week_offset + 1
+    p["end_week"] = week_offset + p["duration_weeks"]
+    p["status"] = "completed" if "core_skills" in request.completed_milestones else "active" if request.readiness_score >= 60 else "upcoming"
+    p["milestones"] = [
+        {"id": "m4", "title": f"Build a {request.target_role or 'full-stack'} project", "xp": 400},
+        {"id": "m5", "title": "Pass 2 skill assessments", "xp": 300},
+        {"id": "m6", "title": "Get resume AI score > 75", "xp": 200}
+    ]
+    phases.append(p)
+    week_offset += p["duration_weeks"]
+
+    # Phase 3: Advanced
+    p = dict(PHASE_TEMPLATES["advanced"])
+    p["start_week"] = week_offset + 1
+    p["end_week"] = week_offset + p["duration_weeks"]
+    p["status"] = "completed" if "advanced" in request.completed_milestones else "upcoming"
+    p["milestones"] = [
+        {"id": "m7", "title": "Design a scalable system end-to-end", "xp": 500},
+        {"id": "m8", "title": "Solve 20 LeetCode Medium problems", "xp": 300},
+        {"id": "m9", "title": "Complete mock system design interview", "xp": 350}
+    ]
+    phases.append(p)
+    week_offset += p["duration_weeks"]
+
+    # Phase 4: Interview prep
+    p = dict(PHASE_TEMPLATES["interview_prep"])
+    p["start_week"] = week_offset + 1
+    p["end_week"] = week_offset + p["duration_weeks"]
+    p["status"] = "upcoming"
+    p["milestones"] = [
+        {"id": "m10", "title": "Complete 5 mock interviews", "xp": 500},
+        {"id": "m11", "title": "Achieve avg interview score > 75", "xp": 400},
+        {"id": "m12", "title": "Prepare STAR answers for 10 questions", "xp": 200}
+    ]
+    phases.append(p)
+    week_offset += p["duration_weeks"]
+
+    # Phase 5: Placement
+    p = dict(PHASE_TEMPLATES["placement"])
+    p["start_week"] = week_offset + 1
+    p["end_week"] = week_offset + p["duration_weeks"]
+    p["status"] = "upcoming"
+    p["milestones"] = [
+        {"id": "m13", "title": "Apply to 20 companies", "xp": 300},
+        {"id": "m14", "title": "Clear 3 technical rounds", "xp": 600},
+        {"id": "m15", "title": "Receive and accept offer", "xp": 1000}
+    ]
+    phases.append(p)
+
+    total_weeks = week_offset + PHASE_TEMPLATES["placement"]["duration_weeks"]
+    total_xp = sum(m["xp"] for p in phases for m in p.get("milestones", []))
+
+    # Personalised insight
+    insights = []
+    if request.readiness_score < 50:
+        insights.append("Focus on fundamentals first — your readiness score suggests gaps in core areas.")
+    elif request.readiness_score < 70:
+        insights.append("You have a solid base. Prioritise project work and mock interviews to accelerate.")
+    else:
+        insights.append("You're nearly placement-ready. Focus on interview prep and active applications.")
+
+    if len(request.weak_areas) > 0:
+        insights.append(f"Your weak areas ({', '.join(request.weak_areas[:2])}) are addressed in Phase 2 and 3.")
+
+    if request.graduation_months_away < total_weeks / 4:
+        insights.append("⚠️ Timeline is tight. Skip foundation phase and jump straight to interview prep.")
+
+    return {
+        "target_role": request.target_role or "Software Engineer",
+        "total_weeks": total_weeks,
+        "total_xp_available": total_xp,
+        "phases": phases,
+        "insights": insights,
+        "model_version": MODEL_VERSION
+    }
+
+
+@app.post("/predict-placement")
+async def predict_placement(
+    request: PlacementPredictionRequest,
+    authorization: str = Header(None)
+):
+    """Predict placement probability and timeline"""
+    verify_api_key(authorization)
+
+    score = request.readiness_score
+    skills_factor = min(1.0, request.skills_count / 10)
+    interview_factor = min(1.0, request.avg_interview_score / 100) if request.avg_interview_score > 0 else 0.3
+    resume_factor = min(1.0, request.resumes_count / 2)
+    test_factor = min(1.0, request.tests_passed / 3)
+
+    raw_prob = (
+        score * 0.40 +
+        skills_factor * 100 * 0.20 +
+        interview_factor * 100 * 0.25 +
+        resume_factor * 100 * 0.10 +
+        test_factor * 100 * 0.05
+    ) / 100
+
+    placement_probability = min(0.97, max(0.05, raw_prob))
+
+    # Estimated months
+    if placement_probability > 0.85:
+        est_months = 1.5
+    elif placement_probability > 0.70:
+        est_months = 2.5
+    elif placement_probability > 0.55:
+        est_months = 4.0
+    else:
+        est_months = 6.0
+
+    # Confidence interval
+    margin = 0.12 if placement_probability > 0.6 else 0.18
+    ci = {
+        "lower": round(max(0, placement_probability - margin), 2),
+        "upper": round(min(1, placement_probability + margin), 2)
+    }
+
+    factors_helping = []
+    factors_hindering = []
+
+    if score >= 75: factors_helping.append(f"Strong readiness score ({score:.0f}/100)")
+    if request.skills_count >= 8: factors_helping.append(f"Good skill breadth ({request.skills_count} skills)")
+    if request.avg_interview_score >= 70: factors_helping.append(f"Solid interview performance ({request.avg_interview_score:.0f} avg)")
+    if request.tests_passed >= 2: factors_helping.append(f"{request.tests_passed} verified skill certificates")
+    if request.resumes_count >= 1: factors_helping.append("Resume ready for applications")
+
+    if score < 60: factors_hindering.append("Readiness score below placement threshold (60)")
+    if request.skills_count < 5: factors_hindering.append("Fewer than 5 verified skills")
+    if request.interviews_completed < 2: factors_hindering.append("Limited mock interview practice")
+    if request.resumes_count == 0: factors_hindering.append("No resume created yet")
+    if request.tests_passed == 0: factors_hindering.append("No skill assessments passed")
+
+    recommended_actions = []
+    if score < 70: recommended_actions.append("Improve readiness score by completing skill tests")
+    if request.interviews_completed < 3: recommended_actions.append("Complete at least 3 mock interviews")
+    if request.resumes_count == 0: recommended_actions.append("Build and get AI analysis on your resume")
+    if request.tests_passed < 2: recommended_actions.append("Pass 2 more skill assessments to earn certificates")
+    if request.skills_count < 8: recommended_actions.append("Add more technical skills to your profile")
+
+    return {
+        "placement_probability": round(placement_probability, 3),
+        "confidence_interval": ci,
+        "estimated_placement_months": est_months,
+        "factors_helping": factors_helping[:4],
+        "factors_hindering": factors_hindering[:4],
+        "recommended_actions": recommended_actions[:4],
+        "readiness_tier": "high" if placement_probability > 0.75 else "medium" if placement_probability > 0.5 else "low",
+        "model_version": MODEL_VERSION
+    }
+
 
 # ============================================
 # ERROR HANDLERS

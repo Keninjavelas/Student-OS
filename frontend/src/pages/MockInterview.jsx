@@ -8,6 +8,7 @@ import {
   fetchInterviewFeedback,
   clearActiveInterview
 } from "../store/slices/interviewSlice";
+import { awardXp, XP_AWARDS } from "../store/slices/gamificationSlice";
 import Card from "../components/ui/Card";
 import Button from "../components/ui/Button";
 import Badge from "../components/ui/Badge";
@@ -275,6 +276,12 @@ function MockInterview() {
 
   async function handleSubmit(interviewId, responses, type, questions, rawAnswers) {
     await dispatch(submitInterview({ interviewId, responses }));
+    // Award base XP for completing
+    dispatch(awardXp({
+      amount: XP_AWARDS.INTERVIEW_COMPLETED,
+      reason: "Completed a mock interview",
+      badgeCheck: ["first_interview"],
+    }));
     // Request AI feedback
     dispatch(fetchInterviewFeedback({
       interviewId,

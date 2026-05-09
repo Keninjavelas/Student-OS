@@ -230,6 +230,103 @@ app.get(
 );
 
 // ============================================
+// ADMIN USER MANAGEMENT ENDPOINTS
+// ============================================
+
+/**
+ * GET /api/admin/users
+ * List all users with pagination
+ */
+app.get(
+  '/api/admin/users',
+  authMiddleware,
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const { page = 1, limit = 50, role, search } = req.query;
+    const filter = {};
+    if (role) filter.role = role;
+    if (search) {
+      filter.$or = [
+        { firstName: { $regex: search, $options: 'i' } },
+        { lastName: { $regex: search, $options: 'i' } },
+        { email: { $regex: search, $options: 'i' } },
+      ];
+    }
+    const users = await User.find(filter)
+      .select('firstName lastName email role isActive isEmailVerified createdAt lastLogin')
+      .sort({ createdAt: -1 })
+      .skip((parseInt(page) - 1) * parseInt(limit))
+      .limit(parseInt(limit));
+    const total = await User.countDocuments(filter);
+    res.status(200).json({ status: 'success', data: users, pagination: { total, page: parseInt(page), limit: parseInt(limit) }, traceId: req.traceId });
+  })
+);
+
+/**
+ * POST /api/admin/users/:userId/role
+ * Update user role
+ */
+app.post(
+  '/api/admin/users/:userId/role',
+  authMiddleware,
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const { role } = req.body;
+    if (!['student', 'admin', 'mentor'].includes(role)) {
+      return res.status(400).json({ status: 'error', message: 'Invalid role', traceId: req.traceId });
+    }
+    const user = await User.findByIdAndUpdate(req.params.userId, { role }, { new: true })
+      .select('firstName lastName email role isActive isEmailVerified createdAt');
+    if (!user) return res.status(404).json({ status: 'error', message: 'User not found', traceId: req.traceId });
+    res.status(200).json({ status: 'success', data: user, traceId: req.traceId });
+  })
+);
+
+/**
+ * POST /api/admin/users/:userId/status
+ * Toggle user active status
+ */
+app.post(
+  '/api/admin/users/:userId/status',
+  authMiddleware,
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const { isActive } = req.body;
+    const user = await User.findByIdAndUpdate(req.params.userId, { isActive: Boolean(isActive) }, { new: true })
+      .select('firstName lastName email role isActive isEmailVerified createdAt');
+    if (!user) return res.status(404).json({ status: 'error', message: 'User not found', traceId: req.traceId });
+    res.status(200).json({ status: 'success', data: user, traceId: req.traceId });
+  })
+);
+
+/**
+ * GET /api/admin/leaderboard
+ * Get top students by readiness score (live leaderboard)
+ */
+app.get(
+  '/api/admin/leaderboard',
+  authMiddleware,
+  asyncHandler(async (req, res) => {
+    const { limit = 20 } = req.query;
+    const profiles = await StudentProfile.find({})
+      .populate('user', 'firstName lastName email')
+      .sort({ 'scores.readinessScore': -1 })
+      .limit(parseInt(limit))
+      .select('user scores academicInfo badges gamification');
+    const leaderboard = profiles.map((p, i) => ({
+      rank: i + 1,
+      name: p.user ? `${p.user.firstName} ${p.user.lastName}` : 'Student',
+      email: p.user?.email,
+      xp: p.gamification?.xp ?? 0,
+      readiness: p.scores?.readinessScore ?? 0,
+      badges: (p.badges ?? []).length,
+      dept: p.academicInfo?.department ?? '—',
+    }));
+    res.status(200).json({ status: 'success', data: leaderboard, traceId: req.traceId });
+  })
+);
+
+// ============================================
 // ERROR HANDLING MIDDLEWARE (ORDER MATTERS)
 // ============================================
 

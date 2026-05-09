@@ -868,4 +868,122 @@ router.post(
   })
 );
 
+// ============================================
+// AI FEATURE ENDPOINTS (proxy to AI service)
+// ============================================
+
+async function callAiService(path, body) {
+  const baseUrl = (process.env.AI_SERVICE_URL || 'http://localhost:8000').replace(/\/+$/, '');
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 30000);
+  try {
+    const res = await fetch(`${baseUrl}${path}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${process.env.AI_SERVICE_SECRET}`,
+      },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+    if (!res.ok) throw new Error(`AI service ${res.status}`);
+    return await res.json();
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+/**
+ * POST /students/ai/roadmap
+ */
+router.post('/ai/roadmap', asyncHandler(async (req, res) => {
+  try {
+    const data = await callAiService('/generate-roadmap', req.body);
+    res.status(200).json({ status: 'success', data, traceId: req.traceId });
+  } catch {
+    res.status(200).json({
+      status: 'success',
+      data: {
+        target_role: req.body.target_role || 'Software Engineer',
+        total_weeks: 24,
+        total_xp_available: 3600,
+        phases: [],
+        insights: ['AI service unavailable. Please try again later.'],
+      },
+      traceId: req.traceId,
+    });
+  }
+}));
+
+/**
+ * POST /students/ai/recommend-skills
+ */
+router.post('/ai/recommend-skills', asyncHandler(async (req, res) => {
+  try {
+    const data = await callAiService('/recommend-skills', req.body);
+    res.status(200).json({ status: 'success', data, traceId: req.traceId });
+  } catch {
+    res.status(200).json({
+      status: 'success',
+      data: { target_role: req.body.target_role || 'Software Engineer', current_skill_count: 0, gap_count: 0, recommendations: [] },
+      traceId: req.traceId,
+    });
+  }
+}));
+
+/**
+ * POST /students/ai/predict-placement
+ */
+router.post('/ai/predict-placement', asyncHandler(async (req, res) => {
+  try {
+    const data = await callAiService('/predict-placement', req.body);
+    res.status(200).json({ status: 'success', data, traceId: req.traceId });
+  } catch {
+    res.status(200).json({
+      status: 'success',
+      data: {
+        placement_probability: 0.5,
+        confidence_interval: { lower: 0.35, upper: 0.65 },
+        estimated_placement_months: 4,
+        factors_helping: [],
+        factors_hindering: ['AI service unavailable'],
+        recommended_actions: ['Try again later'],
+        readiness_tier: 'medium',
+      },
+      traceId: req.traceId,
+    });
+  }
+}));
+
+/**
+ * GET /students/gamification
+ */
+router.get('/gamification', asyncHandler(async (req, res) => {
+  const profile = await StudentProfile.findOne({ user: req.user.id });
+  if (!profile) throw new NotFoundError('Student profile');
+  res.status(200).json({
+    status: 'success',
+    data: profile.gamification || { xp: 0, earnedBadgeIds: [] },
+    traceId: req.traceId,
+  });
+}));
+
+/**
+ * POST /students/gamification/sync
+ */
+router.post('/gamification/sync', asyncHandler(async (req, res) => {
+  const { xp, earnedBadgeIds } = req.body;
+  const profile = await StudentProfile.findOne({ user: req.user.id });
+  if (!profile) throw new NotFoundError('Student profile');
+  if (!profile.gamification) profile.gamification = {};
+  if (xp !== undefined && xp > (profile.gamification.xp || 0)) profile.gamification.xp = xp;
+  if (Array.isArray(earnedBadgeIds)) {
+    const existing = profile.gamification.earnedBadgeIds || [];
+    profile.gamification.earnedBadgeIds = [...new Set([...existing, ...earnedBadgeIds])];
+  }
+  profile.markModified('gamification');
+  await profile.save();
+  res.status(200).json({ status: 'success', traceId: req.traceId });
+}));
+
 module.exports = router;

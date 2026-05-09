@@ -12,6 +12,7 @@ import {
   clearActiveTest,
   submitSkillTest
 } from "../store/slices/skillsSlice";
+import { awardXp, XP_AWARDS } from "../store/slices/gamificationSlice";
 import Card from "../components/ui/Card";
 import Button from "../components/ui/Button";
 import Badge from "../components/ui/Badge";
@@ -215,8 +216,18 @@ function SkillVerification() {
       timeTaken
     }));
     if (!result.error) {
+      const { isPassed, score } = result.payload;
+      // Award XP
+      dispatch(awardXp({
+        amount: isPassed ? XP_AWARDS.SKILL_TEST_PASSED : XP_AWARDS.SKILL_TEST_FAILED,
+        reason: isPassed ? `Passed ${catalog?.title} test (${score}%)` : `Attempted ${catalog?.title} test`,
+        badgeCheck: isPassed
+          ? ["test_pass", "first_test",
+             Object.values(result.payload).filter ? undefined : undefined].filter(Boolean)
+          : ["first_test"],
+      }));
       setShowResult(activeTest.testId);
-      showToast(result.payload?.isPassed ? "Test passed! Certificate earned." : "Test submitted. Keep practicing!");
+      showToast(isPassed ? "Test passed! Certificate earned." : "Test submitted. Keep practicing!");
     }
   }
 

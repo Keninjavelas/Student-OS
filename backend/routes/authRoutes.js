@@ -369,4 +369,45 @@ router.post(
   })
 );
 
+/**
+ * POST /auth/change-password
+ * Change password for authenticated user
+ */
+router.post(
+  '/change-password',
+  authMiddleware,
+  asyncHandler(async (req, res, next) => {
+    const { currentPassword, newPassword, confirmPassword } = req.body;
+
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      throw new ValidationError('Current password, new password, and confirmation are required');
+    }
+    if (newPassword.length < 8) {
+      throw new ValidationError('New password must be at least 8 characters');
+    }
+    if (newPassword !== confirmPassword) {
+      throw new ValidationError('New passwords do not match');
+    }
+
+    const user = await User.findById(req.user.id).select('+password');
+    if (!user) throw new NotFoundError('User');
+
+    const isValid = await user.comparePassword(currentPassword);
+    if (!isValid) throw new AuthenticationError('Current password is incorrect');
+
+    user.password = newPassword;
+    // Invalidate all existing sessions
+    user.tokenVersion = (user.tokenVersion || 0) + 1;
+    await user.save();
+
+    res.clearCookie('refreshToken', getCookieOptions());
+
+    res.status(200).json({
+      status: 'success',
+      message: 'Password changed successfully. Please log in again.',
+      traceId: req.traceId,
+    });
+  })
+);
+
 module.exports = router;
